@@ -38,7 +38,7 @@ contract BridgePair is Ownable {
         bytes32 key = keccak256((abi.encodePacked(chain, currency, token)));
         require(!_coins[key], "BridgePair:coin already exists");
 
-        coinId = numCoins++;
+        coinId = ++numCoins;
         coins[coinId] = Coin(chain, currency, token, decimals, tag);
         _coins[key] = true;
 
@@ -51,7 +51,7 @@ contract BridgePair is Ownable {
         require(bytes(coins[srcCid].chain).length != 0, "BridgePair:src cid not exists");
         require(bytes(coins[dstCid].chain).length != 0, "BridgePair:dst cid not exists");
 
-        pairId = numPairs++;
+        pairId = ++numPairs;
         pairs[pairId] = Pair(srcCid, dstCid, status);
         _pairs[key] = true;
 
