@@ -29,6 +29,7 @@
     "prettier-plugin-solidity": "1.0.0-alpha.45",
     "solhint": "2.3.1",
     "solhint-plugin-prettier": "0.0.4",
-    "solidity-coverage": "0.7.16"
+    "solidity-coverage": "0.7.16",
+    "table": "6.7.1"
   }
 }

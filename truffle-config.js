@@ -14,11 +14,20 @@ module.exports = {
             network_id:      322,
             pollingInterval: 60000,
         },
+        ethrinkeby:  {
+            provider:        function () {
+                return new HDWalletProvider(process.env.MNEMONIC, `https://rinkeby.infura.io/v3/${process.env.INFURA_API_KEY}`);
+            },
+            network_id:      4,
+            skipDryRun:      true,
+            pollingInterval: 60000,
+        },
         kccmainnet:  {
             provider:        function () {
                 return new HDWalletProvider(process.env.MNEMONIC, "https://rpc-mainnet.kcc.network");
             },
             network_id:      321,
+            skipDryRun:      true,
             pollingInterval: 60000,
         },
     },
