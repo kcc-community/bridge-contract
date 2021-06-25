@@ -352,13 +352,9 @@ describe("Bridge", function () {
     });
 
     it("withdrawNative(twice)", async function () {
-        expectEvent(await this.self.withdrawNative(constants.ZERO_ADDRESS, 1, proof, taskHash, {
+        await expectRevert(this.self.withdrawNative(constants.ZERO_ADDRESS, 1, proof, taskHash, {
             from: operator2,
-        }), "WithdrawDoneNative", {
-            to:    constants.ZERO_ADDRESS,
-            value: new BN("1"),
-            proof: proof,
-        });
+        }), "Bridge:tx filled already");
     });
 
     it("withdrawToken(not operator)", async function () {
@@ -379,14 +375,10 @@ describe("Bridge", function () {
         });
     });
 
-    it("withdrawToken(twice)", async function () {
-        expectEvent(await this.self.withdrawToken(this.erc20.address, "0x5B38Da6a701c568545dCfcB03FcB875f56beddC4", 1, proof, "0x05c6e62a3bda695db7eb272bc945462d180613e7fb6f0c42f989698c3a014e79", {
+    it("withdrawToken(filled)", async function () {
+        await expectRevert(this.self.withdrawToken(this.erc20.address, "0x5B38Da6a701c568545dCfcB03FcB875f56beddC4", 1, proof, "0x05c6e62a3bda695db7eb272bc945462d180613e7fb6f0c42f989698c3a014e79", {
             from: operator2,
-        }), "WithdrawDoneToken", {
-            to:    "0x5B38Da6a701c568545dCfcB03FcB875f56beddC4",
-            value: new BN("1"),
-            proof: proof,
-        });
+        }), "Bridge:tx filled already");
     });
 
 });

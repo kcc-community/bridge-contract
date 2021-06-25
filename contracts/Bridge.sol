@@ -21,6 +21,7 @@ contract Bridge is BridgeAdmin, Pausable {
 
     mapping(address => assetSelector)  public depositSelector;
     mapping(address => assetSelector) public withdrawSelector;
+    mapping(bytes32 => bool) public filledTx;
 
     event FeeToTransferred(address indexed previousFeeTo, address indexed newFeeTo);
     event SwapFeeChanged(uint256 indexed previousSwapFee, uint256 indexed newSwapFee);
@@ -77,6 +78,7 @@ contract Bridge is BridgeAdmin, Pausable {
     {
         require(address(this).balance >= value, "Bridge:not enough native token");
         require(taskHash == keccak256((abi.encodePacked(to, value, proof))), "Bridge:taskHash is wrong");
+        require(!filledTx[taskHash], "Bridge:tx filled already");
         uint256 status = logic.supportTask(logic.WITHDRAWTASK(), taskHash, msg.sender, operatorRequireNum);
 
         if (status == logic.TASKPROCESSING()) {
@@ -85,6 +87,7 @@ contract Bridge is BridgeAdmin, Pausable {
             emit WithdrawingNative(to, value, proof);
             emit WithdrawDoneNative(to, value, proof);
             to.transfer(value);
+            filledTx[taskHash] = true;
             logic.removeTask(taskHash);
         }
         return true;
@@ -97,6 +100,7 @@ contract Bridge is BridgeAdmin, Pausable {
     returns (bool)
     {
         require(taskHash == keccak256((abi.encodePacked(to, value, proof))), "Bridge:taskHash is wrong");
+        require(!filledTx[taskHash], "Bridge:tx filled already");
         uint256 status = logic.supportTask(logic.WITHDRAWTASK(), taskHash, msg.sender, operatorRequireNum);
 
         if (status == logic.TASKPROCESSING()) {
@@ -106,6 +110,7 @@ contract Bridge is BridgeAdmin, Pausable {
 
             emit WithdrawingToken(to, _token, value, proof);
             emit WithdrawDoneToken(to, _token, value, proof);
+            filledTx[taskHash] = true;
             logic.removeTask(taskHash);
             return res;
         }
