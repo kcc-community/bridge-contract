@@ -244,7 +244,7 @@ describe("Bridge", function () {
             token:         this.erc20.address,
             targetAddress: user,
             chain:         "kcc",
-            nativeValue:   ether("0"),
+            feeValue:      ether("0"),
         });
         expect(await this.erc20.balanceOf(user)).to.be.bignumber.equal(ether("999"));
         expect(await this.erc20.balanceOf(this.self.address)).to.be.bignumber.equal(ether("1"));
@@ -323,7 +323,7 @@ describe("Bridge", function () {
             token:         this.erc20.address,
             targetAddress: user,
             chain:         "kcc",
-            nativeValue:   ether("0.1"),
+            feeValue:      ether("0.1"),
         });
         expect(await this.erc20.balanceOf(user)).to.be.bignumber.equal(ether("998"));
         expect(await this.erc20.balanceOf(this.self.address)).to.be.bignumber.equal(ether("2"));
