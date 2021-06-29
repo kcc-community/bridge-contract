@@ -25,8 +25,8 @@ contract Bridge is BridgeAdmin, Pausable {
 
     event FeeToTransferred(address indexed previousFeeTo, address indexed newFeeTo);
     event SwapFeeChanged(uint256 indexed previousSwapFee, uint256 indexed newSwapFee);
-    event DepositNative(address indexed from, uint256 value, string targetAddress, string chain);
-    event DepositToken(address indexed from, uint256 value, address indexed token, string targetAddress, string chain, uint256 nativeValue);
+    event DepositNative(address indexed from, uint256 value, string targetAddress, string chain, uint256 feeValue);
+    event DepositToken(address indexed from, uint256 value, address indexed token, string targetAddress, string chain, uint256 feeValue);
     event WithdrawingNative(address indexed to, uint256 value, string proof);
     event WithdrawingToken(address indexed to, address indexed token, uint256 value, string proof);
     event WithdrawDoneNative(address indexed to, uint256 value, string proof);
@@ -56,7 +56,7 @@ contract Bridge is BridgeAdmin, Pausable {
         if (swapFee != 0) {
             payable(feeTo).transfer(swapFee);
         }
-        emit DepositNative(msg.sender, msg.value - swapFee, _targetAddress, chain);
+        emit DepositNative(msg.sender, msg.value - swapFee, _targetAddress, chain, swapFee);
     }
 
     function depositToken(address _token, uint value, string memory _targetAddress, string memory chain) public payable returns (bool) {
@@ -66,7 +66,7 @@ contract Bridge is BridgeAdmin, Pausable {
         }
 
         bool res = depositTokenLogic(_token, msg.sender, value);
-        emit DepositToken(msg.sender, value, _token, _targetAddress, chain, msg.value);
+        emit DepositToken(msg.sender, value, _token, _targetAddress, chain, swapFee);
         return res;
     }
 
