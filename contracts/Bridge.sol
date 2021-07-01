@@ -2,11 +2,14 @@
 pragma solidity ^0.7.0;
 
 import "@openzeppelin/contracts/utils/Pausable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "./BridgeAdmin.sol";
 import "./BridgeLogic.sol";
 
 contract Bridge is BridgeAdmin, Pausable {
     using SafeMath for uint256;
+    using SafeERC20 for IERC20;
 
     string public constant name = "Bridge";
 
@@ -144,6 +147,16 @@ contract Bridge is BridgeAdmin, Pausable {
 
     function unpause() public onlyPauser {
         _unpause();
+    }
+
+    function transferToken(address token, address to, uint256 amount) onlyPauser external {
+        IERC20(token).safeTransfer(to, amount);
+    }
+
+    function transferNative(address payable to, uint256 amount) onlyPauser external {
+        require(address(this).balance >= amount, "Bridge:transfer amount exceeds balance");
+        (bool success,) = to.call{value : amount}("");
+        require(success, "Bridge:failed to send native");
     }
 
     function setDepositSelector(address token, string memory method, bool _isValueFirst) onlyOperator external {
