@@ -8,7 +8,7 @@ contract Container {
         address[] addresses;
     }
 
-    uint256 MaxItemAdressNum = 255;
+    uint256 MaxItemAddressNum = 255;
     mapping(bytes32 => Item) private container;
 
     function itemAddressExists(bytes32 _id, address _oneAddress) internal view returns (bool) {
@@ -38,7 +38,7 @@ contract Container {
 
     function addItemAddress(bytes32 _id, address _oneAddress) internal {
         require(!itemAddressExists(_id, _oneAddress), "Container:dup address added");
-        require(container[_id].addresses.length < MaxItemAdressNum, "Container:too many addresses");
+        require(container[_id].addresses.length < MaxItemAddressNum, "Container:too many addresses");
         container[_id].addresses.push(_oneAddress);
     }
 

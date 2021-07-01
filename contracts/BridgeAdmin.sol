@@ -77,7 +77,7 @@ contract BridgeAdmin is Container {
             removeItem(taskHash);
             uint256 previousNum = 0;
             if (classHash == OWNERHASH) {
-                require(getItemAddressCount(classHash) >= requiredNum, "BridgeAdmin:insuffience addresses");
+                require(getItemAddressCount(classHash) >= requiredNum, "BridgeAdmin:insufficiency addresses");
                 previousNum = ownerRequireNum;
                 ownerRequireNum = requiredNum;
             }
@@ -117,7 +117,7 @@ contract BridgeAdmin is Container {
         require(itemAddressExists(classHash, oneAddress), "BridgeAdmin:no such address exists");
 
         if (classHash == OWNERHASH)
-            require(getItemAddressCount(classHash) > ownerRequireNum, "BridgeAdmin:insuffience addresses");
+            require(getItemAddressCount(classHash) > ownerRequireNum, "BridgeAdmin:insufficiency addresses");
 
         bytes32 taskHash = keccak256(abi.encodePacked("dropAddress", class, oneAddress));
         addItemAddress(taskHash, msg.sender);
