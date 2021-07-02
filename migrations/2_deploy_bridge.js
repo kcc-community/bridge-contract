@@ -32,12 +32,12 @@ module.exports = async function (deployer, network, accounts) {
     await bridge.unpause({from: owner});
 
     const pair = await BridgePair.deployed();
-    await pair.createCoin("eth", "kcs", "0xf34960d9d60be18cC1D5Afc1A6F012A723a28811", 6, false);
+    await pair.createCoin("eth", "kcs", "0x7f3E7408E4e42E5Aa49Aa741110246a788B6feAB", 6, true);
     await pair.createCoin("kcc", "kcs", constants.ZERO_ADDRESS, 18, false);
-    await pair.createCoin("eth", "usdt", "0xdAC17F958D2ee523a2206206994597C13D831ec7", 6, false);
-    await pair.createCoin("kcc", "usdt", "0x67f6a7BbE0da067A747C6b2bEdF8aBBF7D6f60dc", 18, false);
+    await pair.createCoin("eth", "usdt", "0xC211F69500433D8536dB228812aCF47128F8f782", 6, true);
+    await pair.createCoin("kcc", "usdt", "0x67f6a7BbE0da067A747C6b2bEdF8aBBF7D6f60dc", 18, true);
     await pair.createCoin("eth", "eth", constants.ZERO_ADDRESS, 18, false);
-    await pair.createCoin("kcc", "weth", "0xF8Cb9f1D136Ff4c883320b5B4fa80048b888F459", 18, false);
+    await pair.createCoin("kcc", "weth", "0xF8Cb9f1D136Ff4c883320b5B4fa80048b888F459", 18, true);
     await pair.createPair(1, 2, 1);
     await pair.createPair(2, 1, 1);
     await pair.createPair(3, 4, 1);
