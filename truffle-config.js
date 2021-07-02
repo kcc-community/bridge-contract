@@ -9,14 +9,15 @@ module.exports = {
         },
         kcctestnet:  {
             provider:        function () {
-                return new HDWalletProvider(process.env.MNEMONIC, "https://rpc-testnet.kcc.network");
+                return new HDWalletProvider(process.env.BRIDGE_MNEMONIC, "https://rpc-testnet.kcc.network");
             },
             network_id:      322,
+            skipDryRun:      true,
             pollingInterval: 60000,
         },
         ethrinkeby:  {
             provider:        function () {
-                return new HDWalletProvider(process.env.MNEMONIC, `https://rinkeby.infura.io/v3/${process.env.INFURA_API_KEY}`);
+                return new HDWalletProvider(process.env.BRIDGE_MNEMONIC, `https://rinkeby.infura.io/v3/${process.env.INFURA_API_KEY}`);
             },
             network_id:      4,
             skipDryRun:      true,
@@ -24,7 +25,7 @@ module.exports = {
         },
         kccmainnet:  {
             provider:        function () {
-                return new HDWalletProvider(process.env.MNEMONIC, "https://rpc-mainnet.kcc.network");
+                return new HDWalletProvider(process.env.BRIDGE_MNEMONIC, "https://rpc-mainnet.kcc.network");
             },
             network_id:      321,
             skipDryRun:      true,
