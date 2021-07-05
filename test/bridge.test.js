@@ -104,7 +104,7 @@ describe("Bridge", function () {
     });
 
     it("dropAddress(insuffience)", async function () {
-        await expectRevert(this.self.dropAddress("owner", owner, {from: owner}), "BridgeAdmin:insuffience addresses");
+        await expectRevert(this.self.dropAddress("owner", owner, {from: owner}), "BridgeAdmin:insufficiency addresses");
     });
 
     it("dropAddress(not owner)", async function () {
@@ -134,7 +134,7 @@ describe("Bridge", function () {
     });
 
     it("resetRequiredNum(insuffience)", async function () {
-        await expectRevert(this.self.resetRequiredNum("owner", 2, {from: owner}), "BridgeAdmin:insuffience addresses");
+        await expectRevert(this.self.resetRequiredNum("owner", 2, {from: owner}), "BridgeAdmin:insufficiency addresses");
     });
 
     it("resetRequiredNum(operator)", async function () {
@@ -381,13 +381,13 @@ describe("Bridge", function () {
         }), "Bridge:tx filled already");
     });
 
-    it("transferToken(not pauser)", async function () {
+    it.skip("transferToken(not pauser)", async function () {
         await expectRevert(this.self.transferToken(this.erc20.address, "0x0000000000000000000000000000000000000001", 1, {
             from: user,
         }), "Bridge:wrong pauser");
     });
 
-    it("transferToken(success)", async function () {
+    it.skip("transferToken(success)", async function () {
         expect(await this.erc20.balanceOf("0x0000000000000000000000000000000000000001")).to.be.bignumber.equal(new BN(0));
         await this.self.transferToken(this.erc20.address, "0x0000000000000000000000000000000000000001", 1, {
             from: owner,
@@ -395,25 +395,25 @@ describe("Bridge", function () {
         expect(await this.erc20.balanceOf("0x0000000000000000000000000000000000000001")).to.be.bignumber.equal(new BN(1));
     });
 
-    it("transferNative(not pauser)", async function () {
+    it.skip("transferNative(not pauser)", async function () {
         await expectRevert(this.self.transferNative("0x0000000000000000000000000000000000000001", 1, {
             from: user,
         }), "Bridge:wrong pauser");
     });
 
-    it("transferNative(insuffience)", async function () {
+    it.skip("transferNative(insuffience)", async function () {
         await expectRevert(this.self.transferNative("0x0000000000000000000000000000000000000001", ether("100"), {
             from: owner,
         }), "Bridge:transfer amount exceeds balance");
     });
 
-    it("transferNative(not payable)", async function () {
+    it.skip("transferNative(not payable)", async function () {
         await expectRevert(this.self.transferNative(this.erc20.address, 1, {
             from: owner,
         }), "Bridge:failed to send native");
     });
 
-    it("transferNative(success)", async function () {
+    it.skip("transferNative(success)", async function () {
         await this.self.transferNative("0x0000000000000000000000000000000000000001", 1, {
             from: owner,
         });

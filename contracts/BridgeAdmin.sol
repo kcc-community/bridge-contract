@@ -20,7 +20,7 @@ contract BridgeAdmin is Container {
     event AdminTaskDropped(bytes32 taskHash);
 
     modifier validRequirement(uint ownerCount, uint _required) {
-        require(ownerCount <= MaxItemAdressNum && _required <= ownerCount && _required > 0 && ownerCount > 0);
+        require(ownerCount <= MaxItemAddressNum && _required <= ownerCount && _required > 0 && ownerCount > 0);
         _;
     }
 
