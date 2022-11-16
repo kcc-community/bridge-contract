@@ -263,15 +263,16 @@ describe("Bridge", function () {
     });
 
     it("setSwapFee(not owner)", async function () {
-        await expectRevert(this.self.setSwapFee(1, {from: operator1}), "BridgeAdmin:only use owner to call");
+        await expectRevert(this.self.setSwapFee("kcc", 1, {from: operator1}), "BridgeAdmin:only use owner to call");
     });
 
     it("setSwapFee(owner)", async function () {
-        expectEvent(await this.self.setSwapFee(ether("0.1"), {from: owner}), "SwapFeeChanged", {
+        expectEvent(await this.self.setSwapFee("kcc", ether("0.1"), {from: owner}), "SwapFeeChanged", {
+            chain:           "kcc",
             previousSwapFee: new BN(0),
             newSwapFee:      ether("0.1"),
         });
-        expect(await this.self.swapFee()).to.be.bignumber.equal(ether("0.1"));
+        expect(await this.self.getSwapFee("kcc")).to.be.bignumber.equal(ether("0.1"));
     });
 
     it("setDepositSelector(not operator)", async function () {
@@ -309,6 +310,7 @@ describe("Bridge", function () {
             value:         ether("0.9"),
             targetAddress: user,
             chain:         "kcc",
+            feeValue:      ether("0.1"),
         });
     });
 

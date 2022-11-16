@@ -11,7 +11,6 @@ contract Bridge is BridgeAdmin, Pausable {
     string public constant name = "Bridge";
 
     BridgeLogic private logic;
-    uint256 public swapFee;
     address public feeTo;
 
     struct assetSelector {
@@ -22,9 +21,10 @@ contract Bridge is BridgeAdmin, Pausable {
     mapping(address => assetSelector)  public depositSelector;
     mapping(address => assetSelector) public withdrawSelector;
     mapping(bytes32 => bool) public filledTx;
+    mapping(bytes32 => uint256) public chainSwapFee;
 
     event FeeToTransferred(address indexed previousFeeTo, address indexed newFeeTo);
-    event SwapFeeChanged(uint256 indexed previousSwapFee, uint256 indexed newSwapFee);
+    event SwapFeeChanged(string chain, uint256 indexed previousSwapFee, uint256 indexed newSwapFee);
     event DepositNative(address indexed from, uint256 value, string targetAddress, string chain, uint256 feeValue);
     event DepositToken(address indexed from, uint256 value, address indexed token, string targetAddress, string chain, uint256 feeValue);
     event WithdrawingNative(address indexed to, uint256 value, string proof);
@@ -52,6 +52,7 @@ contract Bridge is BridgeAdmin, Pausable {
     }
 
     function depositNative(string memory _targetAddress, string memory chain) public payable {
+        uint256 swapFee = chainSwapFee[keccak256(abi.encodePacked(chain))];
         require(msg.value >= swapFee, "Bridge:insufficient swap fee");
         if (swapFee != 0) {
             payable(feeTo).transfer(swapFee);
@@ -60,6 +61,7 @@ contract Bridge is BridgeAdmin, Pausable {
     }
 
     function depositToken(address _token, uint value, string memory _targetAddress, string memory chain) public payable returns (bool) {
+        uint256 swapFee = chainSwapFee[keccak256(abi.encodePacked(chain))];
         require(msg.value == swapFee, "Bridge:swap fee not equal");
         if (swapFee != 0) {
             payable(feeTo).transfer(swapFee);
@@ -154,9 +156,15 @@ contract Bridge is BridgeAdmin, Pausable {
         withdrawSelector[token] = assetSelector(method, _isValueFirst);
     }
 
-    function setSwapFee(uint256 _swapFee) onlyOwner external {
-        emit SwapFeeChanged(swapFee, _swapFee);
-        swapFee = _swapFee;
+    function setSwapFee(string memory _chain, uint256 _swapFee) onlyOwner external {
+        bytes32 chainHash = keccak256(abi.encodePacked(_chain));
+        emit SwapFeeChanged(_chain, chainSwapFee[chainHash], _swapFee);
+        chainSwapFee[chainHash] = _swapFee;
+    }
+
+    function getSwapFee(string memory _chain) public view returns (uint256) {
+        bytes32 chainHash = keccak256(abi.encodePacked(_chain));
+        return chainSwapFee[chainHash];
     }
 
     function setFeeTo(address _feeTo) onlyOwner external {
