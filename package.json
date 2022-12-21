@@ -23,7 +23,7 @@
     "@openzeppelin/test-environment": "0.1.9",
     "@openzeppelin/test-helpers": "0.5.11",
     "chai": "4.3.4",
-    "mocha": "5.0.4",
+    "mocha": "10.2.0",
     "mochawesome": "4.1.0",
     "prettier": "1.19.1",
     "prettier-plugin-solidity": "1.0.0-alpha.45",
