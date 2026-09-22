@@ -7,29 +7,40 @@
     "compile": "truffle compile --all",
     "deploy": "truffle deploy --reset --compile-all",
     "deploy:network": "npm run deploy -- --network ",
-    "test": "truffle test",
-    "mocha": "npm run compile && mocha --exit --recursive",
+    "test": "truffle test --network test --migrate-none",
+    "mocha": "npm test",
     "coverage": "truffle run coverage --solcoverjs ./.solcover.js",
-    "lint": "solhint contracts/**/*.sol"
+    "lint": "solhint contracts/**/*.sol",
+    "audit:dependencies": "npm audit --include=dev"
   },
   "author": "*",
   "license": "ISC",
   "dependencies": {
-    "@chainlink/contracts": "0.1.7",
-    "@openzeppelin/contracts": "4.7.3",
-    "@truffle/hdwallet-provider": "1.4.0"
+    "@openzeppelin/contracts": "3.4.2"
   },
   "devDependencies": {
-    "@openzeppelin/test-environment": "0.1.9",
-    "@openzeppelin/test-helpers": "0.5.11",
-    "chai": "4.3.4",
-    "mocha": "10.2.0",
-    "mochawesome": "4.1.0",
-    "prettier": "1.19.1",
-    "prettier-plugin-solidity": "1.0.0-alpha.45",
-    "solhint": "2.3.1",
-    "solhint-plugin-prettier": "0.0.4",
-    "solidity-coverage": "0.7.16",
-    "table": "6.7.1"
+    "@openzeppelin/test-helpers": "0.5.16",
+    "@truffle/hdwallet-provider": "2.1.15",
+    "chai": "4.5.0",
+    "ganache": "7.9.2",
+    "mochawesome": "8.1.1",
+    "prettier": "3.9.8",
+    "prettier-plugin-solidity": "2.4.1",
+    "solc": "0.7.4",
+    "solhint": "6.2.4",
+    "solidity-coverage": "0.7.22",
+    "table": "6.9.0",
+    "truffle": "5.11.5"
+  },
+  "engines": {
+    "node": ">=22.22.2 <23"
+  },
+  "packageManager": "npm@12.0.2",
+  "overrides": {
+    "ethereumjs-abi": "0.6.8",
+    "ganache": "$ganache",
+    "form-data@<3": "^2.5.4",
+    "bn.js@<5": "^4.12.3",
+    "elliptic": "6.6.1"
   }
 }

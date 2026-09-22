@@ -1,8 +1,4 @@
 const {
-          accounts,
-          contract,
-      }               = require("@openzeppelin/test-environment");
-const {
           BN,
           ether,
           constants,
@@ -10,13 +6,13 @@ const {
           expectEvent,
       }               = require("@openzeppelin/test-helpers");
 const {expect}        = require("chai");
-const BridgeStorage   = contract.fromArtifact("BridgeStorage");
-const BridgeLogic     = contract.fromArtifact("BridgeLogic");
-const Bridge          = contract.fromArtifact("Bridge");
-const BridgeMockERC20 = contract.fromArtifact("BridgeMockERC20");
+const BridgeStorage   = artifacts.require("BridgeStorage");
+const BridgeLogic     = artifacts.require("BridgeLogic");
+const Bridge          = artifacts.require("Bridge");
+const BridgeMockERC20 = artifacts.require("BridgeMockERC20");
 
 
-describe("Bridge", function () {
+contract("Bridge", function (accounts) {
     const [owner, operator1, operator2, operator3, user] = accounts;
     // proof='source_chain+source_chain_token_address+source_chain_tx_hash+source_chain_tx_log_index'
     const proof                                          = "kcc_a71edc38d189767582c38a3145b5873052c3e47a_5921591b4530abee2260edd8e72f9672164d89d1c705b400ec2a752faa0570db_1";

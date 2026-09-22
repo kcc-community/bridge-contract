@@ -1,18 +1,14 @@
 const {
-          accounts,
-          contract,
-      }          = require("@openzeppelin/test-environment");
-const {
           BN,
           constants,
           expectRevert,
           expectEvent,
       }          = require("@openzeppelin/test-helpers");
 const {expect}   = require("chai");
-const BridgePair = contract.fromArtifact("BridgePair");
+const BridgePair = artifacts.require("BridgePair");
 
 
-describe("BridgePair", function () {
+contract("BridgePair", function (accounts) {
     const [owner, other] = accounts;
     before(async function () {
         this.self = await BridgePair.new({from: owner});

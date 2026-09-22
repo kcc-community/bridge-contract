@@ -1,16 +1,12 @@
 const {
-          accounts,
-          contract,
-      }             = require("@openzeppelin/test-environment");
-const {
           BN,
           expectRevert,
       }             = require("@openzeppelin/test-helpers");
 const {expect}      = require("chai");
-const BridgeStorage = contract.fromArtifact("BridgeStorage");
+const BridgeStorage = artifacts.require("BridgeStorage");
 
 
-describe("BridgeStorage", function () {
+contract("BridgeStorage", function (accounts) {
     const [caller, other] = accounts;
     const taskHash        = "0x02016836a56b71f0d02689e69e326f4f4c1b9057164ef592671cf0d37c8040c0";
     before(async function () {
