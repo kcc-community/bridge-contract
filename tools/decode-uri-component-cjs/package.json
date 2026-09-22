@@ -1,0 +1,13 @@
+{
+  "name": "@kcc-community/decode-uri-component-cjs",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CommonJS export adapter for the upstream patched URI decoder",
+  "type": "commonjs",
+  "main": "index.cjs",
+  "license": "ISC",
+  "engines": { "node": ">=22.22.2 <23" },
+  "dependencies": {
+    "patched-decoder": "npm:decode-uri-component@0.5.0"
+  }
+}
