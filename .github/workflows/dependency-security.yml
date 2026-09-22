@@ -1,8 +1,8 @@
-name: Dependency security
+name: Dependency security and contract tests
 
 on:
   push:
-    branches: [chore/dependency-security-20260922]
+    branches: [main, chore/dependency-security-20260922]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -11,65 +11,60 @@ permissions:
   contents: read
 
 concurrency:
-  group: dependency-security-${{ github.ref }}
+  group: dependency-security-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  baseline:
+  verify:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
-      - name: Inspect dependency and compiler baseline
-        run: |
-          node --version
-          npm --version
-          git rev-parse HEAD
-          cat package.json
-          grep -R -nE '(^pragma |^import |require\()' contracts test migrations truffle-config.js
-          node - <<'NODE'
-          const lock = require('./package-lock.json');
-          console.log('Lockfile version:', lock.lockfileVersion);
-          for (const name of Object.keys({...require('./package.json').dependencies, ...require('./package.json').devDependencies})) {
-            const entry = lock.packages?.['node_modules/' + name] || lock.dependencies?.[name];
-            console.log(name, JSON.stringify(entry && {version: entry.version, dependencies: entry.dependencies || entry.requires}));
-          }
-          NODE
-      - name: Audit committed lockfile
-        id: audit
+      - name: Use the package manager that generated the lockfile
+        run: npm install --global npm@12.0.2 --ignore-scripts --no-audit --no-fund
+      - name: Report all dependency advisories, including development tools
         shell: bash
         run: |
           set +e
-          npm audit --package-lock-only --ignore-scripts --json > audit-baseline.json
+          npm audit --include=dev --package-lock-only --ignore-scripts --json > dependency-audit.json
           status=$?
           set -e
           node - <<'NODE'
           const fs = require('node:fs');
-          const audit = JSON.parse(fs.readFileSync('audit-baseline.json', 'utf8'));
-          if (audit.error || !audit.metadata) throw new Error(JSON.stringify(audit.error || audit));
-          console.log(JSON.stringify(audit.metadata, null, 2));
-          for (const [name, item] of Object.entries(audit.vulnerabilities || {})) {
-            console.log(JSON.stringify({name, severity: item.severity, direct: item.isDirect, range: item.range, fix: item.fixAvailable, via: item.via.map(v => typeof v === 'string' ? v : {title: v.title, url: v.url, range: v.range}), nodes: item.nodes}));
+          const audit = JSON.parse(fs.readFileSync('dependency-audit.json', 'utf8'));
+          if (audit.error || !audit.metadata || !audit.metadata.vulnerabilities) {
+            throw new Error('Dependency audit did not complete: ' + JSON.stringify(audit.error || audit));
           }
-          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, '# Committed lockfile audit\n\n```json\n' + JSON.stringify(audit.metadata, null, 2) + '\n```\n\nThis is npm audit data, not a count of GitHub Dependabot alerts. No alerts are dismissed and no contracts are deployed.\n');
+          const counts = audit.metadata.vulnerabilities;
+          console.log(JSON.stringify(audit.metadata, null, 2));
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+            '# Full dependency audit\n\n```json\n' + JSON.stringify(counts, null, 2) +
+            '\n```\n\nThis report is informational while the documented legacy-toolchain findings remain. ' +
+            'A passing build is not a clean security audit. See docs/dependency-security.md and the full JSON artifact. ' +
+            'Dependabot alerts are not disabled or dismissed.\n');
+          if (counts.total > 0) {
+            console.log('::warning::Known and/or newly reported dependency vulnerabilities remain. Review the full audit artifact; CI success does not mean vulnerability-free.');
+          }
           NODE
           if [ "$status" -gt 1 ]; then exit "$status"; fi
-      - name: Inspect available toolchain versions
-        run: |
-          for package in '@truffle/hdwallet-provider' '@openzeppelin/contracts' '@openzeppelin/test-environment' '@openzeppelin/test-helpers' truffle mocha mochawesome prettier prettier-plugin-solidity solhint solidity-coverage table hardhat ethers solc; do
-            echo "PACKAGE $package"
-            npm view "$package" version deprecated engines --json
-          done
-      - name: Upload audit evidence
+      - name: Clean install from the committed lockfile
+        run: npm ci --no-audit --no-fund
+      - name: Compile with pinned Solidity 0.7.4
+        run: npm run compile
+      - name: Run contract tests without deployment credentials or live networks
+        run: npm test
+      - name: Ensure installation and tests did not change tracked inputs
+        run: git diff --exit-code -- package.json package-lock.json contracts migrations
+      - name: Save full audit evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: dependency-audit-baseline
-          path: audit-baseline.json
-          if-no-files-found: error
-          retention-days: 14
+          name: dependency-audit-${{ github.run_id }}
+          path: dependency-audit.json
+          if-no-files-found: warn
+          retention-days: 30
