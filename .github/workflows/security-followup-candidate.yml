@@ -63,7 +63,10 @@ jobs:
             console.log('RESOLVED_PATCH', name, version);
             return version;
           }
-          const upstream = JSON.parse(execFileSync('npm', ['view', '@ganache/core@0.10.2', '--json'], { encoding: 'utf8', timeout: 60000 }));
+          // npm 12 wraps even single-version object results in an array.
+          const upstreamResults = JSON.parse(execFileSync('npm', ['view', '@ganache/core@0.10.2', '--json'], { encoding: 'utf8', timeout: 60000 }));
+          const upstream = Array.isArray(upstreamResults) ? upstreamResults[0] : upstreamResults;
+          console.log('UPSTREAM', JSON.stringify({name:upstream.name,version:upstream.version,repository:upstream.repository,gitHead:upstream.gitHead}));
           assert.equal(upstream.name, '@ganache/core');
           assert.equal(upstream.version, '0.10.2');
           assert.ok(JSON.stringify(upstream.repository).includes('trufflesuite/ganache'));
