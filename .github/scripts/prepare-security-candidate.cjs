@@ -29,7 +29,18 @@ manifest.devDependencies = {
   table: '6.9.0',
   truffle: '5.11.5'
 };
-manifest.engines = { node: '>=22.12.0 <23' };
+manifest.engines = { node: '>=22.22.2 <23' };
+manifest.packageManager = 'npm@12.0.2';
+manifest.overrides = {
+  // Replace the obsolete unpinned Git dependency with its npm release.
+  'ethereumjs-abi': '0.6.8',
+  // Keep both the direct test provider and Truffle on the same patch release.
+  ganache: '$ganache',
+  // Preserve major-version APIs while resolving known transitive advisories.
+  'form-data@<3': '^2.5.4',
+  'bn.js@<5': '^4.12.3',
+  elliptic: '6.6.1'
+};
 manifest.scripts.test = 'truffle test --network test --migrate-none';
 manifest.scripts.mocha = 'npm test';
 manifest.scripts['audit:dependencies'] = 'npm audit --include=dev';
