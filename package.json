@@ -12,7 +12,8 @@
     "coverage": "truffle run coverage --solcoverjs ./.solcover.js",
     "lint": "solhint contracts/**/*.sol",
     "audit:dependencies": "npm audit --include=dev",
-    "test:toolchain": "node scripts/test-toolchain.cjs"
+    "test:toolchain": "node scripts/test-toolchain.cjs",
+    "test:security-compat": "node scripts/test-security-compat.cjs"
   },
   "author": "*",
   "license": "ISC",
@@ -31,7 +32,9 @@
     "solhint": "6.2.4",
     "solidity-coverage": "0.7.22",
     "table": "6.9.0",
-    "truffle": "5.11.5"
+    "truffle": "5.11.5",
+    "decode-uri-component": "file:tools/compat/decode-uri-component",
+    "uuid": "file:tools/compat/uuid-legacy"
   },
   "engines": {
     "node": ">=22.22.2 <23"
@@ -61,6 +64,9 @@
     "tough-cookie@<4.1.3": "4.1.4",
     "serialize-javascript@<7.0.5": "7.1.1",
     "secp256k1@>=4 <4.0.4": "4.0.5",
-    "yargs-parser@<=5.0.0": "5.0.1"
+    "yargs-parser@<=5.0.0": "5.0.1",
+    "request": "npm:@cypress/request@3.0.10",
+    "decode-uri-component": "$decode-uri-component",
+    "uuid": "$uuid"
   }
 }

@@ -1,0 +1,11 @@
+{
+  "name": "@kcc-community/uuid-legacy-compat",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Legacy UUID entry points backed by the official patched UUID package",
+  "license": "ISC",
+  "main": "index.cjs",
+  "dependencies": {
+    "uuid-patched": "npm:uuid@11.1.1"
+  }
+}
