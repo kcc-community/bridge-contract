@@ -26,12 +26,25 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
+      - name: Use a current npm with shrinkwrap fixes
+        run: npm install --global npm@12.0.2 --ignore-scripts --no-audit --no-fund
+      - name: Re-audit the baseline with the same npm version
+        run: |
+          npm --version
+          set +e
+          npm audit --include=dev --package-lock-only --ignore-scripts --json > audit-before.json
+          status=$?
+          set -e
+          node -e 'const a=require("./audit-before.json"); if(a.error || !a.metadata) throw new Error(JSON.stringify(a)); console.log("BASELINE_AUDIT", JSON.stringify(a.metadata));'
+          if [ "$status" -gt 1 ]; then exit "$status"; fi
       - name: Prepare candidate without changing contract sources
-        run: node .github/scripts/prepare-security-candidate.cjs
-      - name: Generate a real npm lockfile
+        run: |
+          node .github/scripts/prepare-security-candidate.cjs
+          npm pkg set 'engines.node=>=22.22.2 <23' 'packageManager=npm@12.0.2'
+      - name: Generate lockfile from an actual installation
         run: |
           rm package-lock.json
-          npm install --package-lock-only --ignore-scripts --no-audit --no-fund > resolution.log 2>&1 || { tail -80 resolution.log; exit 1; }
+          npm install --ignore-scripts --no-audit --no-fund > resolution.log 2>&1 || { tail -80 resolution.log; exit 1; }
       - name: Audit every dependency, including development tools
         run: |
           set +e
@@ -43,17 +56,18 @@ jobs:
           const audit = JSON.parse(fs.readFileSync('audit-candidate.json', 'utf8'));
           if (audit.error || !audit.metadata) throw new Error(JSON.stringify(audit.error || audit));
           const counts = audit.metadata.vulnerabilities;
+          const baseline = require('./audit-before.json').metadata.vulnerabilities;
           console.log('CANDIDATE_AUDIT', JSON.stringify(audit.metadata));
           for (const [name, value] of Object.entries(audit.vulnerabilities || {})) {
-            console.log('REMAINING', JSON.stringify({name, severity:value.severity, direct:value.isDirect, fix:value.fixAvailable, nodes:value.nodes}));
+            console.log('REMAINING', JSON.stringify({name, severity:value.severity, direct:value.isDirect, fix:value.fixAvailable}));
           }
-          const summary = {baseline:{info:0,low:18,moderate:38,high:60,critical:57,total:173},candidate:counts};
+          const summary = {npm: '12.0.2', baseline, candidate:counts};
           fs.writeFileSync('security-summary.json', JSON.stringify(summary, null, 2) + '\n');
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, '# Dependency remediation candidate\n\n```json\n' + JSON.stringify(summary,null,2) + '\n```\n\nCounts are npm audit records, not GitHub Dependabot alert counts. Remaining advisories are not dismissed. Contract sources and compiler version are unchanged.\n');
-          if (counts.total >= 173 || counts.critical >= 57) throw new Error('Candidate does not improve the recorded baseline');
+          if (counts.total >= baseline.total || counts.critical >= baseline.critical) throw new Error('Candidate does not improve the baseline');
           NODE
           if [ "$status" -gt 1 ]; then exit "$status"; fi
-      - name: Install the exact candidate lockfile
+      - name: Install the exact candidate lockfile from scratch
         run: npm ci --no-audit --no-fund > install.log 2>&1 || { tail -80 install.log; exit 1; }
       - name: Compile all contracts with Solidity 0.7.4
         run: npm run compile 2>&1 | tee compile.log
@@ -86,6 +100,7 @@ jobs:
           name: remediation-evidence
           retention-days: 14
           path: |
+            audit-before.json
             audit-candidate.json
             security-summary.json
             source-hashes.json
