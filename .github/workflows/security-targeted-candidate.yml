@@ -1,0 +1,156 @@
+name: Validate targeted dependency patches
+on:
+  push:
+    branches: [chore/dependency-security-targeted-20260922]
+    paths:
+      - .github/workflows/security-targeted-candidate.yml
+      - scripts/test-dependency-patches.cjs
+      - tools/decode-uri-component-cjs/**
+permissions:
+  contents: read
+concurrency:
+  group: security-targeted-candidate
+  cancel-in-progress: false
+jobs:
+  candidate:
+    if: github.actor == 'viaweb3'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - run: npm install --global npm@12.0.2 --ignore-scripts --no-audit --no-fund
+      - name: Baseline audit and bytecode
+        run: |
+          npm audit --include=dev --package-lock-only --ignore-scripts --json > audit-before.json || test "$?" -eq 1
+          node -e 'const a=require("./audit-before.json"); if(a.error||!a.metadata) throw new Error(JSON.stringify(a)); console.log(a.metadata);'
+          npm ci --no-audit --no-fund > baseline-install.log 2>&1 || { tail -60 baseline-install.log; exit 1; }
+          npm run compile > baseline-compile.log 2>&1 || { cat baseline-compile.log; exit 1; }
+          cp -R build/contracts .baseline-contracts
+      - name: Prepare targeted patches without changing Solidity or test assertions
+        run: |
+          node - <<'NODE'
+          const fs=require('node:fs'), assert=require('node:assert/strict');
+          const {execFileSync}=require('node:child_process');
+          const semver=require('semver');
+          const p=require('./package.json');
+          const result=JSON.parse(execFileSync('npm',['view','@cypress/request@^3','version','--json'],{encoding:'utf8',timeout:60000}));
+          const version=(Array.isArray(result)?result:[result]).filter(v=>semver.valid(v)&&semver.satisfies(v,'^3')).sort(semver.compare).at(-1);
+          assert.ok(version);
+          const metadataResult=JSON.parse(execFileSync('npm',['view',`@cypress/request@${version}`,'--json'],{encoding:'utf8',timeout:60000}));
+          const metadata=Array.isArray(metadataResult)?metadataResult[0]:metadataResult;
+          assert.equal(metadata.name,'@cypress/request');
+          assert.ok(JSON.stringify(metadata.repository).includes('cypress-io/request'));
+          fs.writeFileSync('request-upstream-metadata.json',JSON.stringify(metadata,null,2));
+          p.devDependencies['@kcc-community/decode-uri-component-cjs']='file:tools/decode-uri-component-cjs';
+          p.overrides['decode-uri-component@<0.5.0']='$@kcc-community/decode-uri-component-cjs';
+          p.overrides.request=`npm:@cypress/request@${version}`;
+          p.overrides['uuid@>=7 <11.1.1']='11.1.1';
+          p.scripts['test:dependency-patches']='node scripts/test-dependency-patches.cjs';
+          fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n');
+          console.log('REQUEST_PATCH_VERSION',version);
+          NODE
+      - name: Generate and verify exact lockfile
+        run: |
+          rm -rf node_modules
+          rm package-lock.json
+          npm install --ignore-scripts --no-audit --no-fund > resolution.log 2>&1 || { tail -80 resolution.log; exit 1; }
+          rm -rf node_modules tools/decode-uri-component-cjs/node_modules
+          npm ci --no-audit --no-fund > install.log 2>&1 || { tail -80 install.log; exit 1; }
+      - name: Verify security improvements across all dependencies
+        run: |
+          npm audit --include=dev --package-lock-only --ignore-scripts --json > audit-after.json || test "$?" -eq 1
+          node - <<'NODE'
+          const fs=require('node:fs'),assert=require('node:assert/strict');
+          const before=require('./audit-before.json'),after=require('./audit-after.json');
+          assert.ok(!after.error&&after.metadata);
+          function advisories(a){return [...new Map(Object.values(a.vulnerabilities||{}).flatMap(v=>v.via.filter(x=>typeof x!=='string').map(x=>[x.url,{name:x.name,url:x.url,severity:x.severity,title:x.title}]))).values()].sort((a,b)=>a.url.localeCompare(b.url));}
+          const previous=advisories(before),remaining=advisories(after);
+          const removed=previous.filter(x=>!remaining.some(y=>y.url===x.url));
+          const added=remaining.filter(x=>!previous.some(y=>y.url===x.url));
+          const summary={baseline:'fd8f6310454fc518f67c3168117f437acd9a4f6a',userReportedGitHubAlerts:11,before:before.metadata,after:after.metadata,distinctBefore:previous.length,distinctAfter:remaining.length,removed,added,remaining};
+          fs.writeFileSync('security-targeted-summary.json',JSON.stringify(summary,null,2)+'\n');
+          console.log('TARGETED_AUDIT',JSON.stringify(summary));
+          assert.equal(after.metadata.vulnerabilities.critical,0);
+          assert.equal(added.length,0,'Candidate introduced a new advisory');
+          for(const id of ['GHSA-vcc3-ghjq-m6fr','GHSA-p8p7-x288-28g6']) assert.ok(!remaining.some(x=>x.url.includes(id)),`${id} remains`);
+          assert.ok(remaining.length<previous.length);
+          NODE
+      - name: Compile and compare all ABI and bytecode
+        run: |
+          npm run compile > compile.log 2>&1 || { cat compile.log; exit 1; }
+          node - <<'NODE'
+          const fs=require('node:fs'),assert=require('node:assert/strict');
+          const files=fs.readdirSync('.baseline-contracts').filter(f=>f.endsWith('.json'));
+          for(const f of files){const a=JSON.parse(fs.readFileSync('.baseline-contracts/'+f)),b=JSON.parse(fs.readFileSync('build/contracts/'+f));for(const key of ['abi','bytecode','deployedBytecode']) assert.deepEqual(b[key],a[key],f+': '+key);}
+          fs.writeFileSync('bytecode-comparison.json',JSON.stringify({artifacts:files.length,abi:true,creationBytecode:true,deployedBytecode:true})+'\n');
+          console.log('BYTECODE_IDENTICAL',files.length);
+          NODE
+      - name: Preserve all contract assertions and signing compatibility
+        run: |
+          npm test > test.log 2>&1 || { tail -120 test.log; exit 1; }
+          node -e 'const s=require("node:fs").readFileSync("test.log","utf8").replace(/\u001b\[[0-9;]*m/g,""); console.log(s.slice(-1500));if(!/94 passing/.test(s)||!/6 pending/.test(s))throw new Error("Unexpected test counts");'
+          npm run test:toolchain > toolchain.log 2>&1 || { cat toolchain.log; exit 1; }
+          npm run test:dependency-patches > targeted-tests.log 2>&1 || { cat targeted-tests.log; exit 1; }
+          cat targeted-tests.log
+          git diff --exit-code -- contracts migrations test truffle-config.js
+      - name: Save verified dependency files
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: validated-targeted-files
+          path: |
+            package.json
+            package-lock.json
+          retention-days: 3
+      - name: Save evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: targeted-security-evidence
+          path: |
+            audit-before.json
+            audit-after.json
+            security-targeted-summary.json
+            bytecode-comparison.json
+            request-upstream-metadata.json
+            package.json
+            package-lock.json
+            baseline-install.log
+            baseline-compile.log
+            resolution.log
+            install.log
+            compile.log
+            test.log
+            toolchain.log
+            targeted-tests.log
+          retention-days: 30
+  persist:
+    needs: candidate
+    if: github.actor == 'viaweb3' && github.ref == 'refs/heads/chore/dependency-security-targeted-20260922'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: chore/dependency-security-targeted-20260922
+      - name: Check branch has not moved
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: validated-targeted-files
+      - name: Persist only tested dependency files
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package.json package-lock.json
+          git commit -m 'fix: apply verified HTTP, decoder and modern UUID dependency patches'
+          git push origin HEAD:chore/dependency-security-targeted-20260922
