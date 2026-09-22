@@ -1,0 +1,29 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    # Do not add routine version-update PR noise to this legacy repository.
+    # This limit does not disable security-update PRs or security alerts.
+    open-pull-requests-limit: 0
+    groups:
+      contract-security:
+        applies-to: security-updates
+        patterns:
+          - '@openzeppelin/contracts'
+      tooling-security:
+        applies-to: security-updates
+        patterns:
+          - '*'
+        exclude-patterns:
+          - '@openzeppelin/contracts'
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 1
+    groups:
+      actions:
+        patterns:
+          - '*'
