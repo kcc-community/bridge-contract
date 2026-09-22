@@ -1,4 +1,4 @@
-name: Validate remaining legacy API fixes
+name: Validate remaining legacy UUID fix
 
 on:
   push:
@@ -29,14 +29,14 @@ jobs:
           node-version: '22'
           package-manager-cache: false
       - run: npm install --global npm@12.0.2 --ignore-scripts --no-audit --no-fund
-      - name: Record baseline and compiled artifacts
+      - name: Record post-PR9 baseline and compiled artifacts
         run: |
           npm audit --include=dev --package-lock-only --ignore-scripts --json > audit-before.json || test "$?" -eq 1
           node -e 'const a=require("./audit-before.json"); if(a.error || !a.metadata) throw new Error(JSON.stringify(a)); console.log(a.metadata);'
           npm ci --no-audit --no-fund > baseline-install.log 2>&1 || { tail -80 baseline-install.log; exit 1; }
           npm run compile > baseline-compile.log 2>&1 || { cat baseline-compile.log; exit 1; }
           cp -R build/contracts .baseline-contracts
-      - name: Prepare patched implementations with explicit legacy API adapters
+      - name: Prepare UUID compatibility without altering PR9 fixes
         run: node .github/scripts/prepare-security-tail.cjs
       - name: Generate and clean-install the candidate
         run: |
@@ -44,7 +44,7 @@ jobs:
           rm package-lock.json
           npm install --ignore-scripts --no-audit --no-fund > resolution.log 2>&1 || { tail -100 resolution.log; exit 1; }
           rm -rf node_modules
-          find tools/compat -type d -name node_modules -prune -exec rm -rf {} +
+          find tools -type d -name node_modules -prune -exec rm -rf {} +
           npm ci --no-audit --no-fund > install.log 2>&1 || { tail -100 install.log; exit 1; }
       - name: Audit all real packages and reject any new advisory
         run: |
@@ -58,13 +58,13 @@ jobs:
           const introduced=next.filter(id=>!previous.includes(id));
           const removed=previous.filter(id=>!next.includes(id));
           console.log('AUDIT',JSON.stringify({before:before.metadata,after:after.metadata,previous,next,introduced,removed}));
-          assert.deepEqual(introduced,[], 'Candidate introduced additional advisories');
+          assert.deepEqual(introduced,[]);
           assert.equal(after.metadata.vulnerabilities.critical,0);
           for(const id of ['GHSA-vcc3-ghjq-m6fr','GHSA-w5hq-g745-h8pq','GHSA-p8p7-x288-28g6']) assert.ok(!next.some(url=>url.endsWith(id)),id+' remains');
-          fs.writeFileSync('security-tail-summary.json',JSON.stringify({before:before.metadata,after:after.metadata,previous,next,introduced,removed},null,2)+'\n');
-          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,'# Remaining dependency remediation\n\nDistinct npm advisories: '+previous.length+' → '+next.length+'\n\nNot a verified GitHub Dependabot alert count. Full audit includes development dependencies and adapter backing packages.\n');
+          fs.writeFileSync('security-tail-summary.json',JSON.stringify({baseline:'7edc39261523d65c59bff5d30d4ac6c6866e3d65',before:before.metadata,after:after.metadata,previous,next,introduced,removed},null,2)+'\n');
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,'# UUID remediation after PR9\n\nDistinct npm advisories: '+previous.length+' → '+next.length+'\n\nNot a verified GitHub Dependabot alert count. Full audit includes development dependencies and the adapter backing package.\n');
           NODE
-      - name: Compile and prove this update preserves bytecode
+      - name: Compile and preserve bytecode
         run: |
           npm run compile > compile.log 2>&1 || { cat compile.log; exit 1; }
           node - <<'NODE'
@@ -75,23 +75,24 @@ jobs:
             const b=JSON.parse(fs.readFileSync('build/contracts/'+f));
             for(const key of ['abi','bytecode','deployedBytecode']) assert.deepEqual(a[key],b[key],f+': '+key);
           }
-          fs.writeFileSync('bytecode-comparison.json',JSON.stringify({baseline:'fd8f6310454fc518f67c3168117f437acd9a4f6a',identicalArtifacts:files.length},null,2));
+          fs.writeFileSync('bytecode-comparison.json',JSON.stringify({baseline:'7edc39261523d65c59bff5d30d4ac6c6866e3d65',identicalArtifacts:files.length},null,2));
           console.log('BYTECODE_IDENTICAL',files.length);
           NODE
-      - name: Run unchanged contract tests and existing toolchain fixtures
+      - name: Preserve all contract assertions and toolchain fixtures
         run: |
           npm test > test.log 2>&1 || { tail -120 test.log; exit 1; }
           node -e 'const s=require("fs").readFileSync("test.log","utf8"); if(!/94 passing/.test(s)||!/6 pending/.test(s)) throw new Error("Unexpected test count"); console.log("94 passing; six existing skips");'
           timeout 120s npm run test:toolchain > toolchain.log 2>&1 || { tail -100 toolchain.log; exit 1; }
-      - name: Test all patched API consumers and security regressions
+          timeout 120s npm run test:dependency-patches > dependency-patches.log 2>&1 || { cat dependency-patches.log; exit 1; }
+      - name: Verify legacy and modern UUID callers
         run: timeout 120s npm run test:security-compat > security-compat.log 2>&1 || { cat security-compat.log; exit 1; }
-      - name: Save only fully validated candidate source files
+      - name: Save only fully validated candidate files
         run: |
-          git diff --exit-code -- contracts migrations test truffle-config.js
+          git diff --exit-code -- contracts migrations test truffle-config.js scripts/test-dependency-patches.cjs tools/decode-uri-component-cjs
           mkdir -p validated/tools/compat
           cp package.json package-lock.json validated/
           rsync -a --exclude=node_modules/ tools/compat/ validated/tools/compat/
-          if find validated -type l | grep -q .; then echo 'Unexpected symlink in candidate'; exit 1; fi
+          if find validated -type l | grep -q .; then exit 1; fi
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: validated-security-tail
@@ -108,7 +109,6 @@ jobs:
             audit-after.json
             security-tail-summary.json
             bytecode-comparison.json
-            request-upstream-metadata.json
             package.json
             package-lock.json
             baseline-install.log
@@ -118,6 +118,7 @@ jobs:
             compile.log
             test.log
             toolchain.log
+            dependency-patches.log
             security-compat.log
           retention-days: 14
   persist:
@@ -144,6 +145,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -- package.json package-lock.json tools/compat
-          git diff --cached --stat
-          git commit -m 'fix: replace vulnerable legacy utility implementations with tested patched releases'
+          git commit -m 'fix: patch legacy UUID implementations without replacing modern caller APIs'
           git push origin HEAD:chore/security-tail-20260922

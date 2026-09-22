@@ -13,7 +13,7 @@
     "lint": "solhint contracts/**/*.sol",
     "audit:dependencies": "npm audit --include=dev",
     "test:toolchain": "node scripts/test-toolchain.cjs",
-    "test:security-compat": "node scripts/test-security-compat.cjs"
+    "test:dependency-patches": "node scripts/test-dependency-patches.cjs"
   },
   "author": "*",
   "license": "ISC",
@@ -33,8 +33,7 @@
     "solidity-coverage": "0.7.22",
     "table": "6.9.0",
     "truffle": "5.11.5",
-    "decode-uri-component": "file:tools/compat/decode-uri-component",
-    "uuid": "file:tools/compat/uuid-legacy"
+    "decode-uri-component": "file:tools/decode-uri-component-cjs"
   },
   "engines": {
     "node": ">=22.22.2 <23"
@@ -65,8 +64,8 @@
     "serialize-javascript@<7.0.5": "7.1.1",
     "secp256k1@>=4 <4.0.4": "4.0.5",
     "yargs-parser@<=5.0.0": "5.0.1",
-    "request": "npm:@cypress/request@3.0.10",
     "decode-uri-component": "$decode-uri-component",
-    "uuid": "$uuid"
+    "request": "npm:@cypress/request@3.0.10",
+    "uuid@>=7 <11.1.1": "11.1.1"
   }
 }
