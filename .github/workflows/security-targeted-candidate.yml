@@ -37,18 +37,17 @@ jobs:
           node - <<'NODE'
           const fs=require('node:fs'), assert=require('node:assert/strict');
           const {execFileSync}=require('node:child_process');
-          const semver=require('semver');
           const p=require('./package.json');
-          const result=JSON.parse(execFileSync('npm',['view','@cypress/request@^3','version','--json'],{encoding:'utf8',timeout:60000}));
-          const version=(Array.isArray(result)?result:[result]).filter(v=>semver.valid(v)&&semver.satisfies(v,'^3')).sort(semver.compare).at(-1);
-          assert.ok(version);
+          const version='3.0.10';
           const metadataResult=JSON.parse(execFileSync('npm',['view',`@cypress/request@${version}`,'--json'],{encoding:'utf8',timeout:60000}));
           const metadata=Array.isArray(metadataResult)?metadataResult[0]:metadataResult;
           assert.equal(metadata.name,'@cypress/request');
           assert.ok(JSON.stringify(metadata.repository).includes('cypress-io/request'));
           fs.writeFileSync('request-upstream-metadata.json',JSON.stringify(metadata,null,2));
-          p.devDependencies['@kcc-community/decode-uri-component-cjs']='file:tools/decode-uri-component-cjs';
-          p.overrides['decode-uri-component@<0.5.0']='$@kcc-community/decode-uri-component-cjs';
+          // A direct dependency with the consumed name anchors the relative file
+          // to the repository root instead of query-string's package directory.
+          p.devDependencies['decode-uri-component']='file:tools/decode-uri-component-cjs';
+          p.overrides['decode-uri-component']='$decode-uri-component';
           p.overrides.request=`npm:@cypress/request@${version}`;
           p.overrides['uuid@>=7 <11.1.1']='11.1.1';
           p.scripts['test:dependency-patches']='node scripts/test-dependency-patches.cjs';
@@ -62,6 +61,12 @@ jobs:
           npm install --ignore-scripts --no-audit --no-fund > resolution.log 2>&1 || { tail -80 resolution.log; exit 1; }
           rm -rf node_modules tools/decode-uri-component-cjs/node_modules
           npm ci --no-audit --no-fund > install.log 2>&1 || { tail -80 install.log; exit 1; }
+          node - <<'NODE'
+          const {createRequire}=require('node:module');
+          const q=createRequire(require.resolve('query-string'));
+          console.log('DECODER_RESOLVED',q.resolve('decode-uri-component'));
+          console.log('DECODER_RESULT',q('decode-uri-component')('a%20b'));
+          NODE
       - name: Verify security improvements across all dependencies
         run: |
           npm audit --include=dev --package-lock-only --ignore-scripts --json > audit-after.json || test "$?" -eq 1
