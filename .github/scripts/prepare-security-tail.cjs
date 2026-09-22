@@ -28,13 +28,12 @@ write('tools/compat/decode-uri-component/index.cjs', `'use strict';
 const { default: decode } = require('decoder-patched');
 if (typeof decode !== 'function') throw new TypeError('Patched decoder did not export a function');
 module.exports = function decodeLegacy(input) {
-  // Delegate invalid-type errors to the upstream implementation.
   return decode(typeof input === 'string' ? input.replace(/\\+/g, ' ') : input);
 };
 `);
 
-// Adapt UUID 2/3 call sites to the official fixed implementation. No legacy
-// UUID implementation is copied, renamed, or patched in node_modules.
+// Legacy entry points delegate to the maintained UUID implementation. No
+// vulnerable implementation is copied, renamed, or patched in node_modules.
 manifest('tools/compat/uuid-legacy/package.json', {
   name: '@kcc-community/uuid-legacy-compat', version: '1.0.0', private: true,
   description: 'Legacy UUID entry points backed by the official patched UUID package',
@@ -64,29 +63,24 @@ for (const name of ['v1', 'v3', 'v4', 'v5', 'parse', 'unparse']) {
   write('tools/compat/uuid-legacy/' + name + '.js', "'use strict';\nmodule.exports = require('./index.cjs')." + name + ';\n');
 }
 
-// Select a published 3.x Cypress fork, retaining the legacy Request API rather
-// than taking unrelated 4.x removals. Validate the origin before installation.
-let versions = JSON.parse(execFileSync('npm', ['view', '@cypress/request@3', 'version', '--json'], { encoding: 'utf8' }));
-if (!Array.isArray(versions)) versions = [versions];
-versions = versions.filter(v => /^3\.\d+\.\d+$/.test(v)).sort((a,b) => {
-  const aa=a.split('.').map(Number), bb=b.split('.').map(Number);
-  for(let i=0;i<3;i++) if(aa[i]!==bb[i]) return aa[i]-bb[i];
-  return 0;
-});
-const version = versions.at(-1);
-assert.ok(version, 'No stable Cypress Request 3.x release found');
-let metadata = JSON.parse(execFileSync('npm', ['view', '@cypress/request@' + version, '--json'], { encoding: 'utf8' }));
+// This 3.x release was verified against the official Cypress repository.
+const version = '3.0.10';
+let metadata = JSON.parse(execFileSync('npm', ['view', '@cypress/request@' + version, '--json'], { encoding: 'utf8', timeout: 60000 }));
 if (Array.isArray(metadata)) metadata = metadata[0];
 assert.equal(metadata.name, '@cypress/request');
 assert.equal(metadata.version, version);
 assert.match(JSON.stringify(metadata.repository), /cypress-io\/request/);
 manifest('request-upstream-metadata.json', metadata);
+
+// Direct local dependencies provide stable root-level links. Unanchored file:
+// overrides were incorrectly resolved relative to each transitive consumer.
+p.devDependencies['decode-uri-component'] = 'file:tools/compat/decode-uri-component';
+p.devDependencies.uuid = 'file:tools/compat/uuid-legacy';
 Object.assign(p.overrides, {
   request: 'npm:@cypress/request@' + version,
-  'decode-uri-component@<0.5.0': 'file:tools/compat/decode-uri-component',
-  'uuid@<7': 'file:tools/compat/uuid-legacy',
-  'uuid@>=7 <11.1.1': '11.1.1'
+  'decode-uri-component': '$decode-uri-component',
+  uuid: '$uuid'
 });
 p.scripts['test:security-compat'] = 'node scripts/test-security-compat.cjs';
 manifest('package.json', p);
-console.log('Prepared candidate using @cypress/request@' + version + ', decode-uri-component@0.5.0 and uuid@11.1.1.');
+console.log('Prepared anchored adapters backed by decode-uri-component@0.5.0 and uuid@11.1.1, plus @cypress/request@' + version + '.');
