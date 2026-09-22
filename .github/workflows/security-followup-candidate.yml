@@ -1,0 +1,201 @@
+name: Validate remaining dependency fixes
+
+on:
+  push:
+    branches: [chore/dependency-security-followup-20260922]
+    paths:
+      - .github/workflows/security-followup-candidate.yml
+      - scripts/test-toolchain.cjs
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-security-followup-candidate
+  cancel-in-progress: false
+
+jobs:
+  candidate:
+    if: github.actor == 'viaweb3'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '22'
+      - name: Use the pinned package manager
+        run: npm install --global npm@12.0.2 --ignore-scripts --no-audit --no-fund
+      - name: Record the actual baseline
+        run: |
+          npm audit --include=dev --package-lock-only --ignore-scripts --json > audit-before.json || test "$?" -eq 1
+          node -e 'const a=require("./audit-before.json"); if(a.error || !a.metadata) throw new Error(JSON.stringify(a)); console.log("BASELINE", JSON.stringify(a.metadata));'
+          npm ci --no-audit --no-fund > baseline-install.log 2>&1 || { tail -60 baseline-install.log; exit 1; }
+          npm run compile > baseline-compile.log 2>&1 || { cat baseline-compile.log; exit 1; }
+          cp -R build/contracts .baseline-contracts
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const lock = require('./package-lock.json');
+          for (const [location, pkg] of Object.entries(lock.packages)) {
+            for (const name of ['tar','got','axios','ganache']) {
+              if ((pkg.dependencies || {})[name]) console.log('CONSUMER', location, name, pkg.dependencies[name]);
+            }
+          }
+          fs.writeFileSync('baseline-manifest.json', JSON.stringify(require('./package.json'), null, 2));
+          NODE
+      - name: Resolve explicit patched releases and the upstream modular Ganache package
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const assert = require('node:assert/strict');
+          const { execFileSync } = require('node:child_process');
+          const semver = require('semver');
+          const p = require('./package.json');
+          assert.equal(p.dependencies['@openzeppelin/contracts'], '3.4.2');
+          assert.equal(p.devDependencies.ganache, '7.9.2');
+          function resolve(name, range) {
+            const result = JSON.parse(execFileSync('npm', ['view', `${name}@${range}`, 'version', '--json'], { encoding: 'utf8', timeout: 60000 }));
+            const versions = Array.isArray(result) ? result : [result];
+            const version = versions.filter(v => semver.valid(v) && semver.satisfies(v, range)).sort(semver.compare).at(-1);
+            assert.ok(version, `No published version for ${name}@${range}`);
+            console.log('RESOLVED_PATCH', name, version);
+            return version;
+          }
+          const upstream = JSON.parse(execFileSync('npm', ['view', '@ganache/core@0.10.2', '--json'], { encoding: 'utf8', timeout: 60000 }));
+          assert.equal(upstream.name, '@ganache/core');
+          assert.equal(upstream.version, '0.10.2');
+          assert.ok(JSON.stringify(upstream.repository).includes('trufflesuite/ganache'));
+          fs.writeFileSync('ganache-upstream-metadata.json', JSON.stringify(upstream, null, 2));
+          p.devDependencies.ganache = 'npm:@ganache/core@0.10.2';
+          p.overrides.ganache = '$ganache';
+          const patches = [
+            ['axios@>=1 <2', 'axios', '^1.18.0'],
+            ['got@<11.8.5', 'got', '^11.8.5'],
+            ['qs@<6.16.0', 'qs', '^6.16.0'],
+            ['tmp@<0.2.6', 'tmp', '^0.2.6'],
+            ['diff@>=5 <5.2.2', 'diff', '^5.2.2'],
+            ['minimatch@>=5 <5.1.8', 'minimatch', '^5.1.8'],
+            ['nanoid@>=3 <3.3.18', 'nanoid', '^3.3.18'],
+            ['js-yaml@>=4 <4.3.2', 'js-yaml', '^4.3.2'],
+            ['semver@>=2 <5.7.2', 'semver', '^5.7.2'],
+            ['ws@>=8 <8.21.0', 'ws', '^8.21.0'],
+            ['ws@>=1 <5.2.5', 'ws', '^5.2.5'],
+            ['tar', 'tar', '^7.5.21'],
+            ['tough-cookie@<4.1.3', 'tough-cookie', '^4.1.3'],
+            ['serialize-javascript@<7.0.5', 'serialize-javascript', '^7.0.5'],
+            ['secp256k1@>=4 <4.0.4', 'secp256k1', '^4.0.4'],
+            ['yargs-parser@<=5.0.0', 'yargs-parser', '^5.0.1'],
+          ];
+          for (const [selector, name, range] of patches) p.overrides[selector] = resolve(name, range);
+          p.scripts['test:toolchain'] = 'node scripts/test-toolchain.cjs';
+          fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
+          NODE
+      - name: Generate and clean-install the candidate lockfile
+        run: |
+          rm -rf node_modules
+          rm package-lock.json
+          npm install --ignore-scripts --no-audit --no-fund > resolution.log 2>&1 || { tail -100 resolution.log; exit 1; }
+          rm -rf node_modules
+          npm ci --no-audit --no-fund > install.log 2>&1 || { tail -100 install.log; exit 1; }
+      - name: Audit the full candidate without filtering development dependencies
+        run: |
+          npm audit --include=dev --package-lock-only --ignore-scripts --json > audit-after.json || test "$?" -eq 1
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const a = require('./audit-after.json');
+          const b = require('./audit-before.json');
+          if (a.error || !a.metadata) throw new Error(JSON.stringify(a));
+          const unique = audit => [...new Set(Object.values(audit.vulnerabilities || {}).flatMap(v => v.via.filter(x => typeof x !== 'string').map(x => x.url)))];
+          const summary = {before: b.metadata, after: a.metadata, uniqueAdvisoriesBefore: unique(b).length, uniqueAdvisoriesAfter: unique(a).length};
+          console.log('AUDIT_COMPARISON', JSON.stringify(summary));
+          for (const [name,v] of Object.entries(a.vulnerabilities)) {
+            if (v.via.some(x => typeof x !== 'string')) console.log('REMAINING', JSON.stringify({name,severity:v.severity,nodes:v.nodes,advisories:v.via.filter(x => typeof x !== 'string').map(x => ({url:x.url,range:x.range,title:x.title}))}));
+          }
+          fs.writeFileSync('security-followup-summary.json', JSON.stringify(summary, null, 2) + '\n');
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, '# Full npm audit comparison\n\n```json\n' + JSON.stringify(summary, null, 2) + '\n```\n\nThese are npm audit counts, not verified GitHub Dependabot alert counts.\n');
+          if (a.metadata.vulnerabilities.critical >= b.metadata.vulnerabilities.critical) throw new Error('Critical findings did not improve');
+          NODE
+      - name: Compile, compare bytecode and run the unchanged contract tests
+        run: |
+          npm run compile > compile.log 2>&1 || { cat compile.log; exit 1; }
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const assert = require('node:assert/strict');
+          const files = fs.readdirSync('.baseline-contracts').filter(f => f.endsWith('.json'));
+          for (const file of files) {
+            const before = JSON.parse(fs.readFileSync('.baseline-contracts/' + file));
+            const after = JSON.parse(fs.readFileSync('build/contracts/' + file));
+            for (const key of ['abi','bytecode','deployedBytecode']) assert.deepEqual(after[key], before[key], `${file}: ${key} changed`);
+          }
+          console.log(`BYTECODE_IDENTICAL: ${files.length} contract artifacts`);
+          NODE
+          npm test > test.log 2>&1 || { tail -150 test.log; exit 1; }
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const log = fs.readFileSync('test.log', 'utf8').replace(/\u001b\[[0-9;]*m/g, '');
+          console.log(log.slice(-6000));
+          if (!/94 passing/.test(log) || !/6 pending/.test(log)) throw new Error('Unexpected contract test counts');
+          NODE
+      - name: Exercise the changed dependency consumers on local fixtures
+        run: |
+          timeout 180 npm run test:toolchain > compatibility.log 2>&1 || { cat compatibility.log; exit 1; }
+          cat compatibility.log
+          git diff --exit-code -- contracts migrations test truffle-config.js
+      - name: Save candidate manifest and lockfile only after verification
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: validated-followup-files
+          path: |
+            package.json
+            package-lock.json
+          retention-days: 3
+          if-no-files-found: error
+      - name: Save audit, source metadata and verification evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: dependency-followup-evidence
+          path: |
+            audit-before.json
+            audit-after.json
+            security-followup-summary.json
+            ganache-upstream-metadata.json
+            baseline-manifest.json
+            baseline-install.log
+            baseline-compile.log
+            resolution.log
+            install.log
+            compile.log
+            test.log
+            compatibility.log
+          retention-days: 14
+
+  persist:
+    needs: candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: chore/dependency-security-followup-20260922
+      - name: Refuse to overwrite concurrent changes
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: validated-followup-files
+          path: .validated-followup
+      - name: Commit only the tested dependency files to the review branch
+        run: |
+          cp .validated-followup/package.json package.json
+          cp .validated-followup/package-lock.json package-lock.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- package.json package-lock.json
+          git commit -m 'fix: apply verified remaining dependency security patches'
+          git push origin HEAD:chore/dependency-security-followup-20260922
