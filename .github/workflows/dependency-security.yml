@@ -25,9 +25,10 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '22'
+          package-manager-cache: false
       - name: Use the package manager that generated the lockfile
         run: npm install --global npm@12.0.2 --ignore-scripts --no-audit --no-fund
-      - name: Report all dependency advisories, including development tools
+      - name: Report all advisories and reject critical dependency regressions
         shell: bash
         run: |
           set +e
@@ -41,15 +42,25 @@ jobs:
             throw new Error('Dependency audit did not complete: ' + JSON.stringify(audit.error || audit));
           }
           const counts = audit.metadata.vulnerabilities;
-          console.log(JSON.stringify(audit.metadata, null, 2));
-          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
-            '# Full dependency audit\n\n```json\n' + JSON.stringify(counts, null, 2) +
-            '\n```\n\nThis report is informational while the documented legacy-toolchain findings remain. ' +
-            'A passing build is not a clean security audit. See docs/dependency-security.md and the full JSON artifact. ' +
-            'Dependabot alerts are not disabled or dismissed.\n');
-          if (counts.total > 0) {
-            console.log('::warning::Known and/or newly reported dependency vulnerabilities remain. Review the full audit artifact; CI success does not mean vulnerability-free.');
+          const unique = new Map();
+          for (const item of Object.values(audit.vulnerabilities || {})) {
+            for (const advisory of item.via) {
+              if (typeof advisory !== 'string') unique.set(advisory.url, advisory);
+            }
           }
+          const bySeverity = { critical: 0, high: 0, moderate: 0, low: 0, info: 0 };
+          for (const advisory of unique.values()) bySeverity[advisory.severity]++;
+          const summary = { vulnerablePackageRecords: counts, uniqueAdvisories: unique.size, uniqueAdvisoriesBySeverity: bySeverity };
+          console.log(JSON.stringify(summary, null, 2));
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+            '# Full dependency audit\n\n```json\n' + JSON.stringify(summary, null, 2) +
+            '\n```\n\nAll dependencies, including development tools, are audited. Critical findings fail CI; ' +
+            'other findings remain visible and are not automatically accepted. ' +
+            'These counts are not GitHub Dependabot alert counts. See docs/dependency-security.md and the full JSON artifact.\n');
+          if (counts.total > 0) {
+            console.log('::warning::Dependency advisories remain. Passing CI is not a clean security audit; review the complete report.');
+          }
+          if (counts.critical > 0) throw new Error('Critical dependency vulnerability regression');
           NODE
           if [ "$status" -gt 1 ]; then exit "$status"; fi
       - name: Clean install from the committed lockfile
@@ -58,8 +69,10 @@ jobs:
         run: npm run compile
       - name: Run contract tests without deployment credentials or live networks
         run: npm test
+      - name: Test archive, HTTP and signing compatibility on local fixtures
+        run: timeout 180 npm run test:toolchain
       - name: Ensure installation and tests did not change tracked inputs
-        run: git diff --exit-code -- package.json package-lock.json contracts migrations
+        run: git diff --exit-code -- package.json package-lock.json contracts migrations test scripts truffle-config.js
       - name: Save full audit evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

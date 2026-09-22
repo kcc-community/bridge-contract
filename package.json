@@ -7,11 +7,12 @@
     "compile": "truffle compile --all",
     "deploy": "truffle deploy --reset --compile-all",
     "deploy:network": "npm run deploy -- --network ",
-    "test": "truffle test --network test --migrate-none",
+    "test": "node scripts/run-contract-tests.cjs",
     "mocha": "npm test",
     "coverage": "truffle run coverage --solcoverjs ./.solcover.js",
     "lint": "solhint contracts/**/*.sol",
-    "audit:dependencies": "npm audit --include=dev"
+    "audit:dependencies": "npm audit --include=dev",
+    "test:toolchain": "node scripts/test-toolchain.cjs"
   },
   "author": "*",
   "license": "ISC",
@@ -22,7 +23,7 @@
     "@openzeppelin/test-helpers": "0.5.16",
     "@truffle/hdwallet-provider": "2.1.15",
     "chai": "4.5.0",
-    "ganache": "7.9.2",
+    "ganache": "npm:@ganache/core@0.10.2",
     "mochawesome": "8.1.1",
     "prettier": "3.9.8",
     "prettier-plugin-solidity": "2.4.1",
@@ -41,6 +42,25 @@
     "ganache": "$ganache",
     "form-data@<3": "^2.5.4",
     "bn.js@<5": "^4.12.3",
-    "elliptic": "6.6.1"
+    "elliptic": "6.6.1",
+    "@ethereumjs/vm": {
+      "@ethereumjs/tx": "4.1.1"
+    },
+    "axios@>=1 <2": "1.20.0",
+    "got@<11.8.5": "11.8.6",
+    "qs@<6.16.0": "6.16.0",
+    "tmp@<0.2.6": "0.2.7",
+    "diff@>=5 <5.2.2": "5.2.2",
+    "minimatch@>=5 <5.1.8": "5.1.9",
+    "nanoid@>=3 <3.3.18": "3.3.19",
+    "js-yaml@>=4 <4.3.2": "4.3.2",
+    "semver@>=2 <5.7.2": "5.7.2",
+    "ws@>=8 <8.21.0": "8.21.3",
+    "ws@>=1 <5.2.5": "5.2.7",
+    "tar": "7.5.22",
+    "tough-cookie@<4.1.3": "4.1.4",
+    "serialize-javascript@<7.0.5": "7.1.1",
+    "secp256k1@>=4 <4.0.4": "4.0.5",
+    "yargs-parser@<=5.0.0": "5.0.1"
   }
 }
