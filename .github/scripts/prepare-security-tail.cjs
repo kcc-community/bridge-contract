@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 const p = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
 assert.equal(p.dependencies['@openzeppelin/contracts'], '3.4.2');
 assert.equal(p.devDependencies.solc, '0.7.4');
 assert.equal(p.overrides.request, 'npm:@cypress/request@3.0.10');
@@ -45,10 +46,28 @@ module.exports = legacy;
 for (const name of ['v1', 'v3', 'v4', 'v5', 'parse', 'unparse']) {
   write(dir + name + '.js', "'use strict';\nmodule.exports = require('./index.cjs')." + name + ';\n');
 }
-// Anchor the local package once at the root. Only old UUID consumers use it;
-// modern consumers keep PR #9's unwrapped official uuid@11.1.1 implementation.
+
+// A version-range override cannot coexist with this root file dependency in
+// npm 12. Use consumer-scoped rules to retain the already-patched modern APIs.
+const modernParents = new Set(['web3-eth-accounts', 'apollo-server-core', 'pouchdb', 'pouchdb-utils', 'request']);
+for (const [location, pkg] of Object.entries(lock.packages)) {
+  const range = pkg.dependencies?.uuid;
+  if (!range) continue;
+  const match = /^[~^]?(\d+)\./.exec(range);
+  assert.ok(match, 'Unexpected UUID version range: ' + range);
+  if (Number(match[1]) >= 7) {
+    const name = location.split('node_modules/').at(-1);
+    assert.ok(modernParents.has(name), 'Unclassified modern UUID consumer: ' + name);
+  }
+}
 p.devDependencies.uuid = 'file:tools/compat/uuid-legacy';
-p.overrides['uuid@<7'] = '$uuid';
+delete p.overrides['uuid@>=7 <11.1.1'];
+p.overrides.uuid = '$uuid';
+p.overrides['web3-eth-accounts@>=1.10.0 <2'] = { uuid: '11.1.1' };
+p.overrides['apollo-server-core'] = { uuid: '11.1.1' };
+p.overrides.pouchdb = { uuid: '11.1.1' };
+p.overrides['pouchdb-utils'] = { uuid: '11.1.1' };
+p.overrides.request = { '.': 'npm:@cypress/request@3.0.10', uuid: '11.1.1' };
 p.scripts['test:security-compat'] = 'node scripts/test-security-compat.cjs';
 write('package.json', JSON.stringify(p, null, 2) + '\n');
-console.log('Prepared UUID-only candidate on top of PR #9; Request, decoder and their regression suite are unchanged.');
+console.log('Prepared UUID-only candidate; modern consumer APIs, Request version and decoder remain unchanged.');
