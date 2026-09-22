@@ -1,7 +1,22 @@
+let testProvider;
 const HDWalletProvider = require("@truffle/hdwallet-provider");
 
 module.exports = {
-    networks:  {
+    networks: {
+        // Ephemeral, in-process test chain. Never use deployment credentials here.
+        test: {
+            provider: () => {
+                if (!testProvider) {
+                    testProvider = require("ganache").provider({
+                        wallet: { deterministic: true, totalAccounts: 10 },
+                        chain: { chainId: 1337, networkId: 1337, hardfork: "istanbul" },
+                        logging: { quiet: true },
+                    });
+                }
+                return testProvider;
+            },
+            network_id: 1337,
+        },
         development: {
             host:       "127.0.0.1",
             port:       7545,
@@ -49,7 +64,7 @@ module.exports = {
     },
     compilers: {
         solc: {
-            version:  "0.7.4",
+            version: require.resolve("solc/soljson.js"),
             settings: {
                 optimizer: {
                     enabled: true,
