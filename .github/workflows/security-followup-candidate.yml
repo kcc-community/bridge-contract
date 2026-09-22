@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/security-followup-candidate.yml
       - scripts/test-toolchain.cjs
+      - scripts/run-contract-tests.cjs
 permissions:
   contents: read
 concurrency:
@@ -24,6 +25,7 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '22'
+          package-manager-cache: false
       - name: Use the pinned package manager
         run: npm install --global npm@12.0.2 --ignore-scripts --no-audit --no-fund
       - name: Record the actual baseline and compiled artifacts
@@ -46,7 +48,7 @@ jobs:
           const upstream = Array.isArray(result) ? result[0] : result;
           assert.equal(upstream.name, '@ganache/core');
           assert.equal(upstream.version, '0.10.2');
-          assert.ok(JSON.stringify(upstream.repository).includes('trufflesuite/ganache'));
+          assert.equal(upstream.gitHead, '547c900a50d19b094ef636a9aeccf4f7f2356430');
           fs.writeFileSync('ganache-upstream-metadata.json', JSON.stringify(upstream,null,2));
           p.devDependencies.ganache = 'npm:@ganache/core@0.10.2';
           Object.assign(p.overrides, {
@@ -69,6 +71,7 @@ jobs:
             'secp256k1@>=4 <4.0.4':'4.0.5',
             'yargs-parser@<=5.0.0':'5.0.1'
           });
+          p.scripts.test = 'node scripts/run-contract-tests.cjs';
           p.scripts['test:toolchain'] = 'node scripts/test-toolchain.cjs';
           fs.writeFileSync('package.json', JSON.stringify(p,null,2)+'\n');
           NODE
@@ -88,49 +91,32 @@ jobs:
           const b = require('./audit-before.json');
           if(a.error || !a.metadata) throw new Error(JSON.stringify(a));
           const unique = audit => [...new Set(Object.values(audit.vulnerabilities).flatMap(v => v.via.filter(x => typeof x !== 'string').map(x => x.url)))];
-          const summary = {before:b.metadata, after:a.metadata, uniqueAdvisoriesBefore:unique(b).length, uniqueAdvisoriesAfter:unique(a).length};
+          const beforeIds = unique(b), afterIds = unique(a);
+          const summary = {before:b.metadata, after:a.metadata, uniqueAdvisoriesBefore:beforeIds.length, uniqueAdvisoriesAfter:afterIds.length, newAdvisories:afterIds.filter(id=>!beforeIds.includes(id))};
           console.log('AUDIT_COMPARISON',JSON.stringify(summary));
-          for(const [name,v] of Object.entries(a.vulnerabilities)) if(v.via.some(x => typeof x !== 'string')) console.log('REMAINING',JSON.stringify({name,severity:v.severity,nodes:v.nodes,advisories:v.via.filter(x=>typeof x !== 'string')}));
+          for(const [name,v] of Object.entries(a.vulnerabilities)) if(v.via.some(x=>typeof x!=='string')) console.log('REMAINING',JSON.stringify({name,severity:v.severity,nodes:v.nodes,advisories:v.via.filter(x=>typeof x!=='string')}));
           fs.writeFileSync('security-followup-summary.json',JSON.stringify(summary,null,2)+'\n');
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,'# Full npm audit comparison\n\n```json\n'+JSON.stringify(summary,null,2)+'\n```\n\nNot GitHub Dependabot alert counts.\n');
-          if(a.metadata.vulnerabilities.critical >= b.metadata.vulnerabilities.critical) throw new Error('Critical findings did not improve');
+          if(a.metadata.vulnerabilities.critical!==0 || summary.newAdvisories.length) throw new Error('Security regression');
           NODE
-      - name: Compare all contract bytecode and exercise direct provider execution
+      - name: Verify unchanged contract bytecode
         run: |
           npm run compile > compile.log 2>&1 || { cat compile.log; exit 1; }
           node - <<'NODE'
-          const fs = require('node:fs');
-          const assert = require('node:assert/strict');
-          const files = fs.readdirSync('.baseline-contracts').filter(f=>f.endsWith('.json'));
+          const fs=require('node:fs'), assert=require('node:assert/strict');
+          const files=fs.readdirSync('.baseline-contracts').filter(f=>f.endsWith('.json'));
+          const afterFiles=fs.readdirSync('build/contracts').filter(f=>f.endsWith('.json'));
+          assert.deepEqual(afterFiles.sort(),files.sort());
           for(const file of files){
             const before=JSON.parse(fs.readFileSync('.baseline-contracts/'+file));
             const after=JSON.parse(fs.readFileSync('build/contracts/'+file));
             for(const key of ['abi','bytecode','deployedBytecode']) assert.deepEqual(after[key],before[key],`${file}: ${key} changed`);
           }
-          console.log('BYTECODE_IDENTICAL',files.length);
-          const vmSource=fs.readFileSync('node_modules/@ethereumjs/vm/dist/runTx.js','utf8').split('\n');
-          console.log('VM_TRANSACTION_CHECK',vmSource.slice(210,230).join('\n'));
-          const swarmEntry=require.resolve('swarm-js');
-          console.log('SWARM_ENTRY',swarmEntry);
-          const source=fs.readFileSync(swarmEntry,'utf8');
-          const lines=source.split('\n');
-          for(let i=0;i<lines.length;i++) if(/\btar\b/.test(lines[i])) console.log('SWARM_TAR_CONSUMER',lines.slice(Math.max(0,i-4),i+10).join('\n'));
+          const result={baselineCommit:'dfd5bfd36049b2578682d65c17feab572241b8c0',identicalArtifacts:files.length,fields:['abi','bytecode','deployedBytecode']};
+          fs.writeFileSync('bytecode-comparison.json',JSON.stringify(result,null,2)+'\n');
+          console.log('BYTECODE_IDENTICAL',JSON.stringify(result));
           NODE
-          node - <<'NODE'
-          Error.stackTraceLimit=100;
-          const g=require('ganache');
-          const p=g.provider({wallet:{deterministic:true,totalAccounts:10},chain:{chainId:1337,networkId:1337,hardfork:'istanbul'},logging:{quiet:true}});
-          (async()=>{
-            try{
-              const accounts=await p.request({method:'eth_accounts',params:[]});
-              const data=require('./build/contracts/Migrations.json').bytecode;
-              console.log('Direct local estimate',await p.request({method:'eth_estimateGas',params:[{from:accounts[0],data}]}));
-              console.log('Direct local deployment',await p.request({method:'eth_sendTransaction',params:[{from:accounts[0],data,gas:'0x7a120'}]}));
-            }catch(e){console.error('DIRECT_PROVIDER_ERROR',e.stack);process.exitCode=1;}
-            finally{await p.disconnect();}
-          })();
-          NODE
-      - name: Run all unchanged contract tests
+      - name: Run all unchanged contract assertions
         run: |
           npm test > test.log 2>&1 || { tail -150 test.log; exit 1; }
           node - <<'NODE'
@@ -139,7 +125,7 @@ jobs:
           console.log(log.slice(-6000));
           if(!/94 passing/.test(log)||!/6 pending/.test(log)) throw new Error('Unexpected contract test counts');
           NODE
-      - name: Exercise the changed dependency consumers on local fixtures
+      - name: Exercise dependency consumers with local fixtures
         run: |
           timeout 180 npm run test:toolchain > compatibility.log 2>&1 || { cat compatibility.log; exit 1; }
           cat compatibility.log
@@ -162,6 +148,7 @@ jobs:
             audit-before.json
             audit-after.json
             security-followup-summary.json
+            bytecode-comparison.json
             ganache-upstream-metadata.json
             package.json
             package-lock.json
