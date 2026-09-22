@@ -51,6 +51,7 @@ jobs:
           p.devDependencies.ganache = 'npm:@ganache/core@0.10.2';
           Object.assign(p.overrides, {
             ganache:'$ganache',
+            '@ethereumjs/vm': {'@ethereumjs/tx':'4.1.1'},
             'axios@>=1 <2':'1.20.0',
             'got@<11.8.5':'11.8.6',
             'qs@<6.16.0':'6.16.0',
@@ -94,7 +95,7 @@ jobs:
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,'# Full npm audit comparison\n\n```json\n'+JSON.stringify(summary,null,2)+'\n```\n\nNot GitHub Dependabot alert counts.\n');
           if(a.metadata.vulnerabilities.critical >= b.metadata.vulnerabilities.critical) throw new Error('Critical findings did not improve');
           NODE
-      - name: Compare all contract bytecode and diagnose direct provider execution
+      - name: Compare all contract bytecode and exercise direct provider execution
         run: |
           npm run compile > compile.log 2>&1 || { cat compile.log; exit 1; }
           node - <<'NODE'
@@ -107,11 +108,16 @@ jobs:
             for(const key of ['abi','bytecode','deployedBytecode']) assert.deepEqual(after[key],before[key],`${file}: ${key} changed`);
           }
           console.log('BYTECODE_IDENTICAL',files.length);
+          const vmSource=fs.readFileSync('node_modules/@ethereumjs/vm/dist/runTx.js','utf8').split('\n');
+          console.log('VM_TRANSACTION_CHECK',vmSource.slice(210,230).join('\n'));
+          const swarmEntry=require.resolve('swarm-js');
+          console.log('SWARM_ENTRY',swarmEntry);
+          const source=fs.readFileSync(swarmEntry,'utf8');
+          const lines=source.split('\n');
+          for(let i=0;i<lines.length;i++) if(/\btar\b/.test(lines[i])) console.log('SWARM_TAR_CONSUMER',lines.slice(Math.max(0,i-4),i+10).join('\n'));
           NODE
           node - <<'NODE'
           Error.stackTraceLimit=100;
-          const fs=require('node:fs');
-          const path=require('node:path');
           const g=require('ganache');
           const p=g.provider({wallet:{deterministic:true,totalAccounts:10},chain:{chainId:1337,networkId:1337,hardfork:'istanbul'},logging:{quiet:true}});
           (async()=>{
